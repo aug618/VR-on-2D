@@ -1,245 +1,53 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wonkavision - OP-1 Field (稳定版)</title>
+    <title>WonkaVision - Calibrated</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #000; color: white; }
-        #three-canvas { display: block; }
-        #info-panel { position: absolute; top: 10px; left: 10px; padding: 10px; background-color: rgba(0, 0, 0, 0.6); border-radius: 5px; font-size: 14px; line-height: 1.5; pointer-events: none; }
-        #loading-indicator { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; padding: 20px; background-color: rgba(0, 0, 0, 0.8); border-radius: 10px; }
-        video { display: none; }
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; width: 100%; height: 100%; }
+        .input_video {
+            display: none;
+        }
+        /* 【新】滑动条UI的样式 */
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            font-family: sans-serif;
+            border-radius: 5px;
+        }
+        #controls label {
+            display: block;
+            margin-bottom: 5px;
+        }
     </style>
-
-    <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/"
-      }
-    }
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
 </head>
 <body>
-    <div id="loading-indicator">正在加载模型...</div>
-    <div id="info-panel">
-        <strong>配置 (代码内修改)</strong><br>
-        - 屏幕: <span id="info-screen"></span><br>
-        - 眼睛: <span id="info-eye"></span><br>
-        <hr>
-        <strong>实时数据</strong><br>
-        - 坐标(X,Y,Z cm): <span id="info-pos"></span>
+    <canvas id="main_canvas"></canvas>
+    <video class="input_video"></video>
+
+    <div id="controls">
+        <label for="fov-slider">摄像头FOV: <span id="fov-value">60</span>°</label>
+        <input type="range" id="fov-slider" min="40" max="90" value="60" step="1">
     </div>
-    <canvas id="three-canvas"></canvas>
-    <video id="webcam-input" autoplay playsinline></video>
-
-    <script type="module">
-        import * as THREE from 'three';
-        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-        import 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js';
-
-        const CONFIG = {
-            physicalScreen: { width: 34.7, height: 19.4 },
-            webcam: { offsetY: 10, offsetZ: 0.1 },
-            webcamIntrinsics: { fx: 750, fy: 750, cx: 320, cy: 240 },
-            tracking: {
-                eye: 'right',
-                smoothing: 0.2,
-                depthTuningFactor: 1.0
-            },
-            showDebugInfo: true,
-        };
-
-        let scene, camera, renderer, op1Model;
-        let videoElement, faceMesh;
-        const estimatedEyePos = new THREE.Vector3();
-        const smoothedEyePos = new THREE.Vector3();
-        
-        const IRIS_LANDMARKS = {
-            left: { center: 473, right: 471, left: 469 },
-            right: { center: 468, right: 474, left: 476 }
-        };
-        
-        // 我们将获取DOM元素的操作也放入main函数，确保万无一失
-        let loadingIndicator, infoPanel, infoScreen, infoEye, infoPos;
-
-        async function main() {
-            // 在main函数开始时获取DOM元素，此时DOM一定加载完毕
-            loadingIndicator = document.getElementById('loading-indicator');
-            infoPanel = document.getElementById('info-panel');
-            infoScreen = document.getElementById('info-screen');
-            infoEye = document.getElementById('info-eye');
-            infoPos = document.getElementById('info-pos');
-
-            infoPanel.style.display = CONFIG.showDebugInfo ? 'block' : 'none';
-            infoScreen.textContent = `${CONFIG.physicalScreen.width}cm x ${CONFIG.physicalScreen.height}cm`;
-            infoEye.textContent = CONFIG.tracking.eye;
-
-            await initThree();
-            try {
-                await initWebcam();
-            } catch (err) {
-                loadingIndicator.textContent = `摄像头错误: ${err.message}`;
-                return;
-            }
-            initMediaPipe();
-            animate();
-        }
-
-        async function initThree() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xd95e34); 
-
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 500);
-            scene.add(camera);
-
-            const canvas = document.getElementById('three-canvas');
-            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            
-            const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
-            scene.add(ambientLight);
-            const keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
-            keyLight.position.set(-5, 5, 10);
-            scene.add(keyLight);
-            const rimLight = new THREE.DirectionalLight(0xffffff, 3.0);
-            rimLight.position.set(2, 0, -10);
-            scene.add(rimLight);
-
-            createBackgroundCubes();
-            
-            try {
-                const loader = new GLTFLoader();
-                const gltf = await loader.loadAsync('./scene.gltf');
-                op1Model = gltf.scene;
-
-                op1Model.scale.set(100, 100, 100);
-                op1Model.rotation.set(0.1, -0.5, 0);
-                op1Model.position.set(0, -5, 25);
-
-                scene.add(op1Model);
-            } catch (error) {
-                loadingIndicator.textContent = "模型加载失败，请检查文件路径";
-                console.error("Model loading error:", error);
-            }
-
-            window.addEventListener('resize', onWindowResize, false);
-        }
-
-        function createBackgroundCubes() {
-            const cubeGeo = new THREE.BoxGeometry(1, 1, 1);
-            const edgesGeo = new THREE.EdgesGeometry(cubeGeo);
-            const cubeMat = new THREE.MeshStandardMaterial({ color: 0x8a5e3c, roughness: 0.6});
-            const edgeMat = new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 2 });
-            for (let i = 0; i < 10; i++) {
-                const cube = new THREE.Mesh(cubeGeo, cubeMat);
-                const edges = new THREE.LineSegments(edgesGeo, edgeMat);
-                const scale = Math.random() * 15 + 10;
-                cube.scale.set(scale, scale, scale);
-                edges.scale.copy(cube.scale);
-                const x = (Math.random() - 0.5) * 100;
-                const y = (Math.random() - 0.5) * 50;
-                const z = -(Math.random() * 100 + 50);
-                cube.position.set(x, y, z);
-                edges.position.copy(cube.position);
-                scene.add(cube);
-                scene.add(edges);
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
             }
         }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        async function initWebcam() {
-            videoElement = document.getElementById('webcam-input');
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-            videoElement.srcObject = stream;
-            await new Promise((resolve) => { videoElement.onloadedmetadata = () => resolve(); });
-        }
-
-        function initMediaPipe() {
-            faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
-            faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-            faceMesh.onResults(onFaceMeshResults);
-            sendToMediaPipe();
-        }
-
-        async function sendToMediaPipe() {
-            if (!videoElement || videoElement.readyState < 2) {
-                requestAnimationFrame(sendToMediaPipe);
-                return;
-            }
-            await faceMesh.send({ image: videoElement });
-            requestAnimationFrame(sendToMediaPipe);
-        }
-
-        function onFaceMeshResults(results) {
-            if (loadingIndicator.style.display !== 'none') loadingIndicator.style.display = 'none';
-            if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) return;
-            const landmarks = results.multiFaceLandmarks[0];
-            const videoWidth = videoElement.videoWidth;
-            const videoHeight = videoElement.videoHeight;
-            const iris_points_indices = IRIS_LANDMARKS[CONFIG.tracking.eye];
-            const pL = landmarks[iris_points_indices.left];
-            const pR = landmarks[iris_points_indices.right];
-            const irisPixelWidth = Math.sqrt(Math.pow((pL.x - pR.x) * videoWidth, 2) + Math.pow((pL.y - pR.y) * videoHeight, 2));
-            if (irisPixelWidth < 1) return;
-            const IRIS_REAL_DIAMETER_MM = 11.7;
-            const depthInMm = (CONFIG.webcamIntrinsics.fx * IRIS_REAL_DIAMETER_MM) / irisPixelWidth;
-            const pCenter = landmarks[iris_points_indices.center];
-            const irisCenterX_px = pCenter.x * videoWidth;
-            const irisCenterY_px = pCenter.y * videoHeight;
-            const eyeZ = (depthInMm / 10) * CONFIG.tracking.depthTuningFactor; 
-            const eyeX = ((irisCenterX_px - CONFIG.webcamIntrinsics.cx) * eyeZ) / CONFIG.webcamIntrinsics.fx;
-            const eyeY = -((irisCenterY_px - CONFIG.webcamIntrinsics.cy) * eyeZ) / CONFIG.webcamIntrinsics.fy;
-            if (!isFinite(eyeX) || !isFinite(eyeY) || !isFinite(eyeZ)) return;
-            estimatedEyePos.set(eyeX, eyeY, eyeZ);
-        }
-
-        function updateCamera() {
-            smoothedEyePos.lerp(estimatedEyePos, 0.1);
-            camera.position.copy(smoothedEyePos);
-            const eye = camera.position;
-            const screen = { position: new THREE.Vector3(0,0, -50) };
-            const screenWidth = CONFIG.physicalScreen.width;
-            const screenHeight = CONFIG.physicalScreen.height;
-            const near = camera.near;
-            const screenLeft = -screenWidth / 2;
-            const screenRight = screenWidth / 2;
-            const screenBottom = -screenHeight / 2;
-            const screenTop = screenHeight / 2;
-            const distToScreen = Math.abs(eye.z - screen.position.z);
-            if (distToScreen < 1) return;
-            const left = (screenLeft - eye.x) * near / distToScreen;
-            const right = (screenRight - eye.x) * near / distToScreen;
-            const bottom = (screenBottom - eye.y) * near / distToScreen;
-            const top = (screenTop - eye.y) * near / distToScreen;
-            camera.projectionMatrix.makePerspective(left, right, top, bottom, near, camera.far);
-            camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
-        }
-
-        const clock = new THREE.Clock();
-        function animate() {
-            requestAnimationFrame(animate);
-            const elapsedTime = clock.getElapsedTime();
-            if (op1Model) {
-                op1Model.rotation.y += 0.002;
-                op1Model.position.y = -5 + Math.sin(elapsedTime * 0.5) * 2;
-            }
-            updateCamera();
-            renderer.render(scene, camera);
-            if(CONFIG.showDebugInfo && infoPos) {
-                infoPos.textContent = `${smoothedEyePos.x.toFixed(2)}, ${smoothedEyePos.y.toFixed(2)}, ${smoothedEyePos.z.toFixed(2)}`;
-            }
-        }
-        
-        // --- [核心修改] ---
-        // 等待DOM完全加载后，再启动主程序
-        window.addEventListener('DOMContentLoaded', main);
     </script>
+    <script type="module" src="main.js"></script>
 </body>
 </html>
