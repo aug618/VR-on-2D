@@ -3,28 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WonkaVision - Calibrated</title>
+    <title>WonkaVision - Interactive GUI</title>
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; width: 100%; height: 100%; }
         .input_video {
             display: none;
         }
-        /* 【新】滑动条UI的样式 */
-        #controls {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            padding: 10px;
-            background-color: rgba(0, 0, 0, 0.5);
-            color: white;
-            font-family: sans-serif;
-            border-radius: 5px;
-        }
-        #controls label {
-            display: block;
-            margin-bottom: 5px;
-        }
+        /* lil-gui会自动处理样式，我们不再需要手写controls的css */
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
@@ -34,17 +20,13 @@
 <body>
     <canvas id="main_canvas"></canvas>
     <video class="input_video"></video>
-
-    <div id="controls">
-        <label for="fov-slider">摄像头FOV: <span id="fov-value">60</span>°</label>
-        <input type="range" id="fov-slider" min="40" max="90" value="60" step="1">
-    </div>
     
     <script type="importmap">
         {
             "imports": {
                 "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+                "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/",
+                "lil-gui": "https://unpkg.com/lil-gui@0.19.2/dist/lil-gui.esm.js"
             }
         }
     </script>

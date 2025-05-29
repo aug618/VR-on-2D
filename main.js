@@ -1,40 +1,57 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import GUI from 'lil-gui'; // 导入 lil-gui
+
+// =======================================================================
+// --- 艺术总监最终控制面板 (你可以安全地调整这里的数值) ---
+// =======================================================================
+const params = {
+    movementMultiplier: 2.5,
+    modelScale: 0.6,
+    rotationX: 20,
+    rotationY: 35,
+    modelY: 2,
+    modelZ: 8,
+    fov: 60,
+    smoothingFactor: 0.1
+};
+
+// =======================================================================
+// --- 创建并配置 GUI ---
+// =======================================================================
+const gui = new GUI();
+gui.add(params, 'movementMultiplier', 0, 5).name('左右/上下灵敏度');
+gui.add(params, 'smoothingFactor', 0.01, 0.5).name('平滑系数');
+const modelFolder = gui.addFolder('模型调整');
+modelFolder.add(params, 'modelScale', 0.1, 2.0).name('大小');
+modelFolder.add(params, 'rotationX', -90, 90).name('向前倾斜 (度)');
+modelFolder.add(params, 'rotationY', -90, 90).name('朝向观众 (度)');
+modelFolder.add(params, 'modelY', -10, 20).name('垂直位置');
+modelFolder.add(params, 'modelZ', -10, 20).name('前后位置');
+gui.add(params, 'fov', 40, 90).name('摄像头FOV (度)');
 
 // --- 全局变量 ---
 const eyePosition = new THREE.Vector3();
-// 【FIX 2: 数据平滑】创建一个目标位置向量，用于平滑过渡
-const targetPosition = new THREE.Vector3(); 
-
-// --- UI元素 ---
-const fovSlider = document.getElementById('fov-slider');
-const fovValueSpan = document.getElementById('fov-value');
-let FOV_DEGREES = parseFloat(fovSlider.value);
-
-fovSlider.addEventListener('input', (event) => {
-    FOV_DEGREES = parseFloat(event.target.value);
-    fovValueSpan.textContent = FOV_DEGREES;
-});
-
-const movementMultiplier = 4.0;
+const targetPosition = new THREE.Vector3();
+let model; // 将model提升为全局变量，方便在animate中访问
 
 // --- Three.js 场景设置 ---
 const canvas = document.querySelector('#main_canvas');
 const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111111);
-
 const camera = new THREE.PerspectiveCamera();
-// 【FIX 3: 调整取景】将相机初始位置向后移动，留出更多空间
 camera.position.set(0, 0, 40); 
 camera.projectionMatrixAutoUpdate = false;
 
+// 添加光源
 const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
 scene.add(ambientLight);
 const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
 directionalLight.position.set(5, 10, 7.5);
 scene.add(directionalLight);
 
+// 添加虚拟屏幕辅助框
 const screenWidth = 34.5;
 const screenHeight = 19.4;
 const screenZ = 0;
@@ -44,13 +61,10 @@ screenHelper.material.color.set(0xffffff);
 screenHelper.position.z = screenZ;
 scene.add(screenHelper);
 
+// 加载模型
 const loader = new GLTFLoader();
 loader.load('models/scene.gltf', (gltf) => {
-    const model = gltf.scene;
-    // 【FIX 3: 调整取景】再次缩小模型，让它更精致
-    model.scale.set(0.5, 0.5, 0.5); 
-    model.position.set(0, 0, 10);
-    model.rotation.set(Math.PI / 8, Math.PI / 6, 0); 
+    model = gltf.scene; // 赋值给全局变量
     scene.add(model);
 });
 
@@ -67,16 +81,15 @@ function onResults(results) {
             Math.pow(rightIrisLeft.y * videoElement.videoHeight - rightIrisRight.y * videoElement.videoHeight, 2)
         );
         const KNOWN_IRIS_DIAMETER_MM = 11.7;
-        const FOCAL_LENGTH_PX = (videoElement.videoWidth / 2) / Math.tan((FOV_DEGREES / 2) * Math.PI / 180);
+        const FOCAL_LENGTH_PX = (videoElement.videoWidth / 2) / Math.tan((params.fov / 2) * Math.PI / 180);
         let depth = (FOCAL_LENGTH_PX * KNOWN_IRIS_DIAMETER_MM) / (irisPixelWidth * 10);
+        depth = Math.max(20, Math.min(60, depth));
+        const finalZ = 45 - (depth - 25) * 0.8; 
         const eyeCenterX = (rightIrisLeft.x + rightIrisRight.x) / 2;
         const eyeCenterY = (rightIrisLeft.y + rightIrisRight.y) / 2;
-        let x = (eyeCenterX * videoElement.videoWidth - videoElement.videoWidth / 2) * depth / FOCAL_LENGTH_PX;
-        let y = (eyeCenterY * videoElement.videoHeight - videoElement.videoHeight / 2) * depth / FOCAL_LENGTH_PX;
-        depth = Math.max(20, Math.min(60, depth)); // 调整深度范围以匹配更远的相机
-
-        // 【FIX 1: 纠正方向】在x坐标前加负号，以解决摄像头镜像问题
-        eyePosition.set(-x, -y, depth);
+        let x = (eyeCenterX * videoElement.videoWidth - videoElement.videoWidth / 2) * finalZ / FOCAL_LENGTH_PX;
+        let y = (eyeCenterY * videoElement.videoHeight - videoElement.videoHeight / 2) * finalZ / FOCAL_LENGTH_PX;
+        eyePosition.set(-x, -y, finalZ);
     }
 }
 
@@ -94,24 +107,37 @@ mpCamera.start();
 // --- 最终的动画循环 ---
 function animate() {
     requestAnimationFrame(animate);
+
+    // 在动画循环中，实时从GUI参数更新模型状态
+    if (model) {
+        model.scale.set(params.modelScale, params.modelScale, params.modelScale);
+        model.rotation.set(
+            params.rotationX * Math.PI / 180,
+            params.rotationY * Math.PI / 180,
+            0
+        );
+        model.position.set(0, params.modelY, params.modelZ);
+    }
+    
+    // 更新相机目标位置
+    targetPosition.set(
+        eyePosition.x * params.movementMultiplier,
+        eyePosition.y * params.movementMultiplier,
+        eyePosition.z
+    );
+
+    // 平滑移动相机
+    camera.position.lerp(targetPosition, params.smoothingFactor); 
+    
+    // 检查并更新渲染器尺寸
     const canvas = renderer.domElement;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
     if (canvas.width !== width || canvas.height !== height) {
         renderer.setSize(width, height, false);
     }
-
-    // 更新目标位置
-    targetPosition.set(
-        eyePosition.x * movementMultiplier,
-        eyePosition.y * movementMultiplier,
-        eyePosition.z
-    );
-
-    // 【FIX 2: 数据平滑】使用lerp让相机平滑地移动到目标位置，消除抖动
-    // 0.1是平滑系数，值越小越平滑，但延迟越高
-    camera.position.lerp(targetPosition, 0.1); 
-
+    
+    // 计算并应用偏轴投影矩阵
     const near = 0.1; 
     const far = 1000;
     const eyeZ = camera.position.z;
@@ -119,6 +145,7 @@ function animate() {
     const right = (screenWidth / 2 - camera.position.x) * (near / eyeZ);
     const top = (screenHeight / 2 - camera.position.y) * (near / eyeZ);
     const bottom = (-screenHeight / 2 - camera.position.y) * (near / eyeZ);
+    
     const M = camera.projectionMatrix.elements;
     const x_ = 2 * near / (right - left);
     const y_ = 2 * near / (top - bottom);
@@ -126,10 +153,13 @@ function animate() {
     const b = (top + bottom) / (top - bottom);
     const c = -(far + near) / (far - near);
     const d = -2 * far * near / (far - near);
+
     M[0] = x_; M[4] = 0;  M[8] = a;   M[12] = 0;
     M[1] = 0;  M[5] = y_; M[9] = b;   M[13] = 0;
     M[2] = 0;  M[6] = 0;  M[10] = c;  M[14] = d;
     M[3] = 0;  M[7] = 0;  M[11] = -1; M[15] = 0;
+
     renderer.render(scene, camera);
 }
+
 animate();
