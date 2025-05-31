@@ -18,14 +18,18 @@ export const params = {
     eyeY: 0,
     eyeZ: 0,
     // 背景隧道网格参数
-    tunnelLength: 300,    // 隧道的视觉长度 (原tunnelGridSize)
-    gridCellSize: 10,       // 网格单元的期望边长 (用于计算密度)
+    tunnelLength: 120,    // 大幅缩短隧道长度，使网格在雾效中快速消失
+    gridCellSize: 4,       // 网格单元的期望边长 (用于计算密度)
     gridColor: 0xffffff,    // 网格线颜色
     showFloorGrid: true,
     showCeilingGrid: true,
     showWallGrids: true,
-    // 雾效参数
+    // 雾效参数 - 微调以平衡网格消失和目标可见性
     fogColor: 0x000000,     // 雾的颜色 (应与背景色匹配)
-    fogNear: 50,            // 雾开始应用的距离
-    fogFar: 200             // 雾完全遮挡的距离
+    fogNear: 20,            // 稍微推远雾的起始距离
+    fogFar: 90,             // 适度增加雾的终止距离
+    
+    // 目标对象控制参数
+    showAllTargets: true,
+    targets: {} // 将在运行时填充每个目标的显示状态和位置
 };

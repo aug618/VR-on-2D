@@ -10,7 +10,7 @@ import { setupGUI } from './guiManager.js';
 import { setupFog } from './fogManager.js';
 import { updateBackgroundGrid } from './backgroundGridManager.js';
 import { createVirtualScreen } from './virtualScreenManager.js';
-import { setupTargetScene } from './targetObjectManager.js';
+import { setupTargetScene, updateTargetVisibility, updateTargetPosition, setAllTargetsVisibility, getTargetsData } from './targetObjectManager.js';
 import { initializeMediaPipe } from './mediaPipeHandler.js';
 
 // --- Video Element ---
@@ -28,7 +28,11 @@ setupTargetScene(scene); // targetsData 现在是 targetObjectManager 的一部�
 setupGUI(params, {
     updateBackgroundGrid: () => updateBackgroundGrid(scene, params, backgroundGridGroup),
     setupFog: () => setupFog(scene, params),
-    createVirtualScreen: () => createVirtualScreen(scene, params)
+    createVirtualScreen: () => createVirtualScreen(scene, params),
+    updateTargetVisibility: updateTargetVisibility,
+    updateTargetPosition: updateTargetPosition,
+    setAllTargetsVisibility: setAllTargetsVisibility,
+    getTargetsData: getTargetsData
 });
 
 // --- MediaPipe Initialization ---

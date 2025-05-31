@@ -44,9 +44,9 @@ export function initializeMediaPipe(videoElement) {
             let x = (eyeCenterX * videoElement.videoWidth - videoElement.videoWidth / 2) * finalZ / FOCAL_LENGTH_PX;
             let y = (eyeCenterY * videoElement.videoHeight - videoElement.videoHeight / 2) * finalZ / FOCAL_LENGTH_PX;
             
-            eyePosition.set(x, -y, finalZ); // 直接更新导入的 eyePosition
+            eyePosition.set(-x, -y, finalZ); // 修改：使用 -x 而不是 x
             
-            appParams.eyeX = parseFloat(x.toFixed(2));
+            appParams.eyeX = parseFloat((-x).toFixed(2)); // 修改：使用 -x 而不是 x
             appParams.eyeY = parseFloat((-y).toFixed(2));
             appParams.eyeZ = parseFloat(finalZ.toFixed(2)); // finalZ 是最终用于显示和相机定位的深度
             

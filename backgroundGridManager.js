@@ -23,7 +23,12 @@ function createCustomGrid(width, depth, divisionsW, divisionsD, color) {
     }
 
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({ color: color, fog: true }); // 确保材质受雾影响
+    // 确保网格线材质完全受雾效影响，使远处网格消失
+    const material = new THREE.LineBasicMaterial({ 
+        color: color, 
+        fog: true,
+        transparent: true // 增加透明度支持，配合雾效
+    });
     return new THREE.LineSegments(geometry, material);
 }
 
