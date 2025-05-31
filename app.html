@@ -4,14 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WonkaVision - Interactive GUI</title>
-    <style>
-        body { margin: 0; overflow: hidden; }
-        canvas { display: block; width: 100%; height: 100%; }
-        .input_video {
-            display: none;
-        }
-        /* lil-gui会自动处理样式，我们不再需要手写controls的css */
-    </style>
+<style>
+    body { 
+        margin: 0; 
+        padding: 0;  /* 添加 */
+        overflow: hidden; 
+        background: black;  /* 添加，避免白色背景 */
+    }
+    canvas { 
+        display: block; 
+        width: 100vw;   /* 使用视口单位 */
+        height: 100vh;  /* 使用视口单位 */
+        background: black;  /* 添加 */
+    }
+    .input_video {
+        display: none;
+    }
+</style>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
