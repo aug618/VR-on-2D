@@ -20,7 +20,24 @@ const params = {
     // 屏幕物理参数（修正）
     screenWidth: 34.5,        // 屏幕实际宽度(cm)
     screenHeight: 19.4,       // 屏幕实际高度(cm)
-    cameraToScreenDistance: 0.5 // 摄像头在屏幕上方的距离(cm)
+    cameraToScreenDistance: 0.5, // 摄像头在屏幕上方的距离(cm)
+    // 坐标显示参数
+    eyeX: 0,
+    eyeY: 0,
+    eyeZ: 0,
+    // 背景隧道网格参数
+    tunnelWidth: 60,        // 隧道宽度
+    tunnelHeight: 40,       // 隧道高度
+    tunnelLength: 300,    // 隧道的视觉长度 (原tunnelGridSize)
+    gridCellSize: 10,       // 网格单元的期望边长 (用于计算密度)
+    gridColor: 0xffffff,    // 网格线颜色
+    showFloorGrid: true,
+    showCeilingGrid: true,
+    showWallGrids: true,
+    // 雾效参数
+    fogColor: 0x000000,     // 雾的颜色 (应与背景色匹配)
+    fogNear: 50,            // 雾开始应用的距离
+    fogFar: 200             // 雾完全遮挡的距离
 };
 
 // =======================================================================
@@ -32,6 +49,12 @@ gui.add(params, 'depthMultiplier', 0.1, 5.0).name('深度敏感度');
 gui.add(params, 'minDepth', 10, 50).name('最小深度');
 gui.add(params, 'maxDepth', 50, 150).name('最大深度');
 gui.add(params, 'smoothingFactor', 0.01, 0.5).name('平滑系数');
+
+// 坐标显示面板
+const coordFolder = gui.addFolder('虹膜中心坐标 (相对于摄像头)');
+coordFolder.add(params, 'eyeX').name('X坐标 (cm)').listen().disable();
+coordFolder.add(params, 'eyeY').name('Y坐标 (cm)').listen().disable();
+coordFolder.add(params, 'eyeZ').name('Z坐标/深度 (cm)').listen().disable();
 
 // 屏幕校准参数
 const screenFolder = gui.addFolder('屏幕校准');
@@ -49,17 +72,149 @@ modelFolder.add(params, 'modelZ', -10, 20).name('前后位置');
 
 gui.add(params, 'fov', 40, 90).name('摄像头FOV (度)');
 
+// 背景网格控制 - 重命名为背景隧道控制
+const tunnelFolder = gui.addFolder('背景隧道');
+tunnelFolder.add(params, 'tunnelWidth', 10, 200).name('隧道宽度').onChange(updateBackgroundGrid);
+tunnelFolder.add(params, 'tunnelHeight', 10, 150).name('隧道高度').onChange(updateBackgroundGrid);
+tunnelFolder.add(params, 'tunnelLength', 50, 1000).name('隧道长度').onChange(updateBackgroundGrid); // 原tunnelGridSize
+tunnelFolder.add(params, 'gridCellSize', 1, 50).name('网格单元大小').onChange(updateBackgroundGrid); // 原gridDivisions
+tunnelFolder.addColor(params, 'gridColor').name('网格颜色').onChange(updateBackgroundGrid);
+tunnelFolder.add(params, 'showFloorGrid').name('显示地面网格').onChange(updateBackgroundGrid);
+tunnelFolder.add(params, 'showCeilingGrid').name('显示顶面网格').onChange(updateBackgroundGrid);
+tunnelFolder.add(params, 'showWallGrids').name('显示侧墙网格').onChange(updateBackgroundGrid);
+
+// 雾效控制
+const fogFolder = gui.addFolder('雾效');
+fogFolder.addColor(params, 'fogColor').name('雾颜色').onChange(setupFog);
+fogFolder.add(params, 'fogNear', 1, 300).name('雾起始距离').onChange(setupFog);
+fogFolder.add(params, 'fogFar', 50, 1000).name('雾终止距离').onChange(setupFog);
+
+
 // --- 全局变量 ---
 const eyePosition = new THREE.Vector3();
 const targetPosition = new THREE.Vector3();
 let model;
 let screenMesh;
+let backgroundGridGroup = new THREE.Group(); // 用于存放所有背景网格
 
 // --- Three.js 场景设置 ---
 const canvas = document.querySelector('#main_canvas');
 const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x111111);
+scene.background = new THREE.Color(params.fogColor); // 使用雾的颜色作为背景色
+
+// 设置雾效函数
+function setupFog() {
+    scene.background.set(params.fogColor); // 确保背景色与雾色一致
+    if (params.fogNear < params.fogFar) { // 仅当near < far时设置雾
+        scene.fog = new THREE.Fog(params.fogColor, params.fogNear, params.fogFar);
+    } else {
+        scene.fog = null; // 如果参数不合法，则移除雾
+    }
+}
+
+// 自定义网格生成函数
+function createCustomGrid(width, depth, divisionsW, divisionsD, color) {
+    const points = [];
+    const halfWidth = width / 2;
+    const halfDepth = depth / 2;
+    const stepW = width / divisionsW;
+    const stepD = depth / divisionsD;
+
+    // Lines along Depth (local Z)
+    for (let i = 0; i <= divisionsW; i++) {
+        const x = -halfWidth + i * stepW;
+        points.push(new THREE.Vector3(x, 0, -halfDepth));
+        points.push(new THREE.Vector3(x, 0, halfDepth));
+    }
+
+    // Lines along Width (local X)
+    for (let j = 0; j <= divisionsD; j++) {
+        const z = -halfDepth + j * stepD;
+        points.push(new THREE.Vector3(-halfWidth, 0, z));
+        points.push(new THREE.Vector3(halfWidth, 0, z));
+    }
+
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({ color: color, fog: true }); // 确保材质受雾影响
+    return new THREE.LineSegments(geometry, material);
+}
+
+
+// 创建背景网格函数
+function updateBackgroundGrid() {
+    // 清理旧的网格
+    while (backgroundGridGroup.children.length > 0) {
+        const child = backgroundGridGroup.children[0];
+        backgroundGridGroup.remove(child);
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+            // LineSegments 使用单个 LineBasicMaterial
+            if (typeof child.material.dispose === 'function') {
+                child.material.dispose();
+            }
+        }
+    }
+
+    const color = new THREE.Color(params.gridColor);
+    const length = params.tunnelLength;
+    const width = params.tunnelWidth;
+    const height = params.tunnelHeight;
+    const cellSize = params.gridCellSize;
+
+    if (cellSize <= 0) return; 
+
+    // 计算各个方向上的格数
+    const divisionsL = Math.max(1, Math.round(length / cellSize)); // 沿隧道长度方向
+    const divisionsW = Math.max(1, Math.round(width / cellSize));  // 沿隧道宽度方向
+    const divisionsH = Math.max(1, Math.round(height / cellSize)); // 沿隧道高度方向
+    
+    // 隧道网格从 z=0 延伸到 z=-length，所以中心点在 z = -length / 2
+    const tunnelCenterZ = -length / 2;
+
+    // 地面网格 (在XZ平面, localX是宽度, localZ是长度)
+    if (params.showFloorGrid) {
+        const floorGrid = createCustomGrid(width, length, divisionsW, divisionsL, color);
+        floorGrid.position.y = -height / 2;
+        floorGrid.position.z = tunnelCenterZ;
+        backgroundGridGroup.add(floorGrid);
+    }
+
+    // 天花板网格 (在XZ平面, localX是宽度, localZ是长度)
+    if (params.showCeilingGrid) {
+        const ceilingGrid = createCustomGrid(width, length, divisionsW, divisionsL, color);
+        ceilingGrid.position.y = height / 2;
+        ceilingGrid.position.z = tunnelCenterZ;
+        backgroundGridGroup.add(ceilingGrid);
+    }
+
+    // 侧墙网格
+    if (params.showWallGrids) {
+        // 左墙 (期望在YZ平面, localX是高度, localZ是长度)
+        const leftWallGrid = createCustomGrid(height, length, divisionsH, divisionsL, color);
+        // 初始网格在XZ平面，X轴对应高度，Z轴对应长度
+        // 需要旋转使其X轴变为世界Y轴，Z轴保持世界Z轴
+        leftWallGrid.rotation.z = Math.PI / 2; // 将局部X轴旋转到世界Y轴方向
+        leftWallGrid.position.x = -width / 2;
+        leftWallGrid.position.z = tunnelCenterZ;
+        backgroundGridGroup.add(leftWallGrid);
+
+        // 右墙 (期望在YZ平面, localX是高度, localZ是长度)
+        const rightWallGrid = createCustomGrid(height, length, divisionsH, divisionsL, color);
+        rightWallGrid.rotation.z = Math.PI / 2; // 将局部X轴旋转到世界Y轴方向
+        rightWallGrid.position.x = width / 2;
+        rightWallGrid.position.z = tunnelCenterZ;
+        backgroundGridGroup.add(rightWallGrid);
+    }
+    
+    if (!backgroundGridGroup.parent) {
+        scene.add(backgroundGridGroup);
+    }
+}
+
+// 初始化
+setupFog(); // 初始化雾效
+updateBackgroundGrid(); // 初始化背景网格
 
 // 重要：虚拟摄像机代表用户眼睛，初始位置在摄像头前方50cm
 const camera = new THREE.PerspectiveCamera();
@@ -73,6 +228,9 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
 directionalLight.position.set(5, 10, -25);
 scene.add(directionalLight);
 
+
+// 创建虚拟屏幕（位于网络摄像头下方）
+// 初始创建屏幕
 // 创建虚拟屏幕（位于网络摄像头下方）
 function createVirtualScreen() {
     // 移除旧屏幕
@@ -80,21 +238,27 @@ function createVirtualScreen() {
         scene.remove(screenMesh);
     }
     
-    const screenGeometry = new THREE.BoxGeometry(params.screenWidth, params.screenHeight, 0.1);
-    const screenMaterial = new THREE.MeshBasicMaterial({ 
-        color: 0xffffff, 
-        wireframe: true,
+    // 创建矩形边框，只显示4条边
+    const points = [
+        new THREE.Vector3(-params.screenWidth/2, -params.screenHeight/2, 0),
+        new THREE.Vector3(params.screenWidth/2, -params.screenHeight/2, 0),
+        new THREE.Vector3(params.screenWidth/2, params.screenHeight/2, 0),
+        new THREE.Vector3(-params.screenWidth/2, params.screenHeight/2, 0),
+        new THREE.Vector3(-params.screenWidth/2, -params.screenHeight/2, 0) // 闭合矩形
+    ];
+    
+    const screenGeometry = new THREE.BufferGeometry().setFromPoints(points);
+    const screenMaterial = new THREE.LineBasicMaterial({ 
+        color: 0xffffff,
         transparent: true,
         opacity: 0.3
     });
-    screenMesh = new THREE.Mesh(screenGeometry, screenMaterial);
+    screenMesh = new THREE.Line(screenGeometry, screenMaterial);
     
     // 修正：屏幕在网络摄像头（世界原点）下方
     screenMesh.position.set(0, -params.cameraToScreenDistance-params.screenHeight/2, 0);
     scene.add(screenMesh);
 }
-
-// 初始创建屏幕
 createVirtualScreen();
 
 // 监听屏幕参数变化
@@ -144,6 +308,11 @@ function onResults(results) {
         
         // 设置眼睛位置（相对于网络摄像头）
         eyePosition.set(x, -y, finalZ);
+        
+        // 更新 GUI 显示的坐标值
+        params.eyeX = parseFloat(x.toFixed(2));
+        params.eyeY = parseFloat((-y).toFixed(2));
+        params.eyeZ = parseFloat(finalZ.toFixed(2));
         
         // 更新虚拟摄像机目标位置
         targetPosition.set(
