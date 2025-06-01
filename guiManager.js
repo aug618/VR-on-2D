@@ -66,6 +66,24 @@ export function setupGUI(params, callbacks) {
     fogFolder.add(params, 'fogNear', 1, 300).name('雾起始距离').onChange(callbacks.setupFog);
     fogFolder.add(params, 'fogFar', 50, 1000).name('雾终止距离').onChange(callbacks.setupFog);
 
+    // 线条控制面板
+    const lineFolder = gui.addFolder('线条效果');
+    lineFolder.add(params, 'lineFogNear', 50, 500).name('线条雾起始距离').onChange(() => {
+        if (callbacks.updateLineMaterials) callbacks.updateLineMaterials();
+    });
+    lineFolder.add(params, 'lineFogFar', 100, 800).name('线条雾终止距离').onChange(() => {
+        if (callbacks.updateLineMaterials) callbacks.updateLineMaterials();
+    });
+    lineFolder.add(params, 'lineWidth', 0.5, 5.0).name('线条粗细').onChange(() => {
+        if (callbacks.updateLineMaterials) callbacks.updateLineMaterials();
+    });
+    lineFolder.add(params, 'lineOpacity', 0, 1).name('线条透明度').onChange(() => {
+        if (callbacks.updateLineMaterials) callbacks.updateLineMaterials();
+    });
+    lineFolder.add(params, 'lineBrightness', 0.5, 5.0).name('线条亮度').onChange(() => {
+        if (callbacks.updateLineMaterials) callbacks.updateLineMaterials();
+    });
+
     // 目标对象控制面板
     const targetsFolder = gui.addFolder('圆环目标控制');
     targetsFolder.add(params, 'showAllTargets').name('显示所有目标').onChange((value) => {
@@ -77,6 +95,15 @@ export function setupGUI(params, callbacks) {
             }
         });
     });
+
+    // 添加重播动画按钮
+    targetsFolder.add({
+        replayAnimation: () => {
+            if (callbacks.replaySpawnAnimation) {
+                callbacks.replaySpawnAnimation();
+            }
+        }
+    }, 'replayAnimation').name('重播喷射动画');
 
     // 为每个目标创建控制项
     if (callbacks.getTargetsData) {
@@ -126,6 +153,14 @@ export function setupGUI(params, callbacks) {
             }, 'reset').name('重置位置');
         });
     }
+
+    // 界面控制面板
+    const interfaceFolder = gui.addFolder('界面显示');
+    interfaceFolder.add(params, 'showTextOverlay').name('显示文字标签').onChange((value) => {
+        if (callbacks.updateTextOverlayVisibility) {
+            callbacks.updateTextOverlayVisibility(value);
+        }
+    });
 
     // 如果其他模块不需要GUI实例，则无需返回
     // return gui; 

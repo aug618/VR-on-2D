@@ -29,7 +29,20 @@ export const params = {
     fogNear: 20,            // 稍微推远雾的起始距离
     fogFar: 90,             // 适度增加雾的终止距离
     
+    // 线条雾效和外观控制参数
+    lineFogNear: 50,       // 线条开始受雾效影响的距离
+    lineFogFar: 390,        // 线条完全被雾遮挡的距离
+    lineWidth: 2.0,         // 线条粗细（降低默认值，因为现在是半径）
+    lineOpacity: 1.0,       // 线条透明度
+    lineBrightness: 3.0,    // 线条亮度倍数（降低默认值）
+    
     // 目标对象控制参数
     showAllTargets: true,
-    targets: {} // 将在运行时填充每个目标的显示状态和位置
+    targets: {}, // 将在运行时填充每个目标的显示状态和位置
+    
+    // 文字覆盖层控制参数
+    showTextOverlay: true,
+    
+    // 动画控制参数
+    replayAnimation: function() {} // 占位函数，将在GUI中被替换
 };

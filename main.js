@@ -10,8 +10,9 @@ import { setupGUI } from './guiManager.js';
 import { setupFog } from './fogManager.js';
 import { updateBackgroundGrid } from './backgroundGridManager.js';
 import { createVirtualScreen } from './virtualScreenManager.js';
-import { setupTargetScene, updateTargetVisibility, updateTargetPosition, setAllTargetsVisibility, getTargetsData } from './targetObjectManager.js';
+import { setupTargetScene, updateTargetVisibility, updateTargetPosition, setAllTargetsVisibility, getTargetsData, updateSpawnAnimation, updateLineMaterials, replaySpawnAnimation } from './targetObjectManager.js';
 import { initializeMediaPipe } from './mediaPipeHandler.js';
+import { createTextOverlay, updateTextOverlayVisibility } from './textOverlayManager.js';
 
 // --- Video Element ---
 const videoElement = document.getElementsByClassName('input_video')[0];
@@ -23,6 +24,9 @@ updateBackgroundGrid(scene, params, backgroundGridGroup);
 createVirtualScreen(scene, params);
 setupTargetScene(scene); // targetsData 现在是 targetObjectManager 的一部分
 
+// 创建文字覆盖层
+createTextOverlay();
+
 // --- GUI Setup ---
 // GUI设置函数也从模块导入，并传入所需的回调
 setupGUI(params, {
@@ -32,7 +36,10 @@ setupGUI(params, {
     updateTargetVisibility: updateTargetVisibility,
     updateTargetPosition: updateTargetPosition,
     setAllTargetsVisibility: setAllTargetsVisibility,
-    getTargetsData: getTargetsData
+    getTargetsData: getTargetsData,
+    updateLineMaterials: updateLineMaterials,
+    updateTextOverlayVisibility: updateTextOverlayVisibility,
+    replaySpawnAnimation: replaySpawnAnimation
 });
 
 // --- MediaPipe Initialization ---
@@ -78,6 +85,9 @@ function updateOffAxisProjection() {
 function animate() {
     // targetPosition 由 mediaPipeHandler 更新 (通过导入的 sceneElements.targetPosition)
     camera.position.lerp(targetPosition, params.smoothingFactor);
+    
+    // 更新圆环喷射动画
+    updateSpawnAnimation();
     
     updateOffAxisProjection();
     
