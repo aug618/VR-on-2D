@@ -26,7 +26,7 @@ export function setupGUI(params, callbacks) {
         callbacks.updateBackgroundGrid();
     });
 
-    gui.add(params, 'fov', 40, 90).name('摄像头FOV (度)');
+    gui.add(params, 'fov', 1, 90).name('摄像头FOV (度)');
 
     // 背景隧道
     const tunnelFolder = gui.addFolder('背景隧道');
