@@ -1,6 +1,13 @@
 # 3D Eye Tracking Visualization
 
-Johnny 著名目标演示在本地浏览器中复现
+Johnny 著名目标演示在本地浏览器中复现：https://shopify.github.io/spatial-commerce-projects/WonkaVision/
+
+
+## 📌 项目展示
+
+[![观看视频演示](./src/cover.jpg)](https://www.bilibili.com/video/BV1m1TMzuEjL/?vd_source=fe1fd2953c312e516b0120426bc5800e)
+
+
 
 ## 🌟 功能特性
 
@@ -16,7 +23,7 @@ Johnny 著名目标演示在本地浏览器中复现
 ```
 3D/
 ├── index.html              # 主入口文件
-├── 说明文档.md              # 项目文档
+├── README.md              # 项目文档
 ├── src/                   # 源代码目录
 │   ├── core/              # 核心模块
 │   │   ├── main.js        # 主程序入口
